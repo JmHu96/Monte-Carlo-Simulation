@@ -1,0 +1,163 @@
+---
+title: "Bouncy"
+author: "Jiaming Hu"
+date: "5/27/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+niter <- 100000
+w.list <- NULL
+w.list[1] <- 1
+t.list <- NULL
+t.list[1] <- 1
+v.list <- NULL
+v.list[1] <- rnorm(1)
+mu <- 10
+sigma <- 3
+```
+
+```{r}
+fn <- function(w,v,mu,sigma,t){
+  return(max(0,v*(w+v*t-mu)/sigma^2))
+}
+
+pp <- function(w,v,mu,sigma){
+  T <- 100
+  lambda.bar <- optimize(fn,w=w,v=v,mu=mu,sigma=sigma,interval = c(0,T),maximum = T)$objective
+  t <- 0
+  indicator <- 0
+  while(indicator == 0){
+    u1 <- runif(1)
+    t <- t - log(u1)/lambda.bar
+    if(t > T){
+      return(T)
+    }
+    u2 <- runif(1)
+    if(u2 <= fn(w,v,mu,sigma,t)/lambda.bar){
+      return(t)
+    }
+  }
+}
+```
+
+```{r}
+set.seed(20210525)
+for(k in 2:niter){
+  tr <- rexp(1)
+  tb <- pp(w.list[k-1],v.list[k-1],mu,sigma)
+  t.list[k] <- min(tr,tb)
+  w.list[k] <- w.list[k-1]+v.list[k-1]*t.list[k]
+
+  if(tb<tr){
+    v.list[k] <- -v.list[k-1]
+  }else{
+    v.list[k] <- rnorm(1)
+  }
+}
+```
+
+```{r}
+burn.in <- niter/10
+hist(w.list[burn.in:niter],xlim=c(-10,30),main="Normal(10,9)")
+```
+
+
+
+# Now try Bivariate Normal
+
+```{r}
+require(mvtnorm)
+niter <- 10000
+w.list <- NULL
+w.list <- rbind(w.list,c(3,3))
+t.list <- NULL
+t.list[1] <- 1
+v.list <- NULL
+v.list <- rbind(v.list,rmvnorm(1,mean = c(0,0),sigma=diag(2)))
+mu <- c(10,5)
+sigma <- 3*diag(2)
+#sigma <- matrix(c(1,0,0,1),nrow=2,ncol=2)
+```
+
+
+```{r}
+fn <- function(w,v,mu,sigma,t){
+  x <- (w+v*t)[1]
+  y <- (w+v*t)[2]
+  mux <- mu[1]
+  muy <- mu[2]
+  sigmax <- sqrt(sigma[1,1])
+  sigmay <- sqrt(sigma[2,2])
+  rho <- sigma[1,2]/(sigmax*sigmay)
+  gradx <- (1/(1-rho^2))*((x-mux)/sigmax^2 - rho*((y-muy)/(sigmax*sigmay)))*v[1]
+  grady <- (1/(1-rho^2))*((y-muy)/sigmay^2 - rho*((x-mux)/(sigmax*sigmay)))*v[2]
+  return(max(0,gradx+grady))
+}
+
+pp <- function(w,v,mu,sigma){
+  T <- 100
+  lambda.bar <- optimize(fn,w=w,v=v,mu=mu,sigma=sigma,interval = c(0,T),maximum = T)$objective
+  t <- 0
+  indicator <- 0
+  while(indicator == 0){
+    u1 <- runif(1)
+    t <- t - log(u1)/lambda.bar
+    if(t > T){
+      return(T)
+    }
+    u2 <- runif(1)
+    if(u2 <= fn(w,v,mu,sigma,t)/lambda.bar){
+      return(t)
+    }
+  }
+}
+
+grad.prod <- function(w,v,mu,sigma){
+  x <- w[1]
+  y <- w[2]
+  mux <- mu[1]
+  muy <- mu[2]
+  sigmax <- sqrt(sigma[1,1])
+  sigmay <- sqrt(sigma[2,2])
+  rho <- sigma[1,2]/(sigmax*sigmay)
+  gradx <- (1/(1-rho^2))*((x-mux)/sigmax^2 - rho*((y-muy)/(sigmax*sigmay)))
+  grady <- (1/(1-rho^2))*((y-muy)/sigmay^2 - rho*((x-mux)/(sigmax*sigmay)))
+  
+  inner <- gradx*v[1]+grady*v[2]
+  grad <- c(gradx,grady)
+  eu.norm <- sqrt(sum(grad^2))
+  
+  return(v-(2*inner/eu.norm)*grad)
+}
+```
+
+```{r}
+set.seed(20210525)
+for(k in 2:niter){
+  tr <- rexp(1)
+  tb <- pp(w.list[k-1,],v.list[k-1,],mu,sigma)
+  t.list[k] <- min(tr,tb)
+  w.list <- rbind(w.list,w.list[k-1,]+v.list[k-1,]*t.list[k])
+
+  if(tb<tr){
+    v.list <- rbind(v.list,grad.prod(w.list[k,],v.list[k-1,],mu,sigma))
+  }else{
+    v.list <- rbind(v.list,rmvnorm(1,mean=c(0,0),sigma=diag(2)))
+  }
+  # print(k)
+}
+```
+
+```{r}
+burn.in <- niter/10
+w.list.final <- w.list[burn.in:niter,]
+plot(w.list.final[,1],w.list.final[,2],main="Samples for Bi-variate Normal")+
+  points(x=mu[1],y=mu[2],col=2,pch=19,cex=1)
+```
+
+

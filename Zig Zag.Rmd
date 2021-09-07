@@ -1,0 +1,168 @@
+---
+title: "Untitled"
+author: "Jiaming Hu"
+date: "5/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Zig-Zag (for N(10,25))
+
+Initialization
+```{r}
+niter <- 10000
+t.list <- NULL
+theta.list <- NULL
+xee.list <- NULL
+gamma <- 1
+# Here we consider a case where mu=10 and sigma=5, but one could generalize
+# this to any N(mu,sigma^2)
+mu <- 10
+sigma <- 3
+```
+
+The Zig-Zag algorithm
+```{r}
+t.list[1] <- 0
+theta.list[1] <- 1
+xee.list[1] <- 1
+
+for(k in 2:niter){
+  m <- function(x){
+    return(max(0,(theta.list[k-1]*(xee.list[k-1]-mu))/sigma^2 + x/sigma^2) + gamma)
+  }
+  
+  M <- function(x,a,b){
+    return(a + b*x)
+  }
+  
+  a <- abs(theta.list[k-1]*(xee.list[k-1]-mu))/sigma^2 + gamma
+  b <- 1/sigma^2
+  u <- runif(1)
+  s <- -log(u)
+  tau <- (sqrt(a^2+2*b*s)-a)/b
+  mt <- m(t.list[k-1])
+  Mt <- M(t.list[k-1],a,b)
+  
+  t.list[k] <- t.list[k-1]+tau
+  xee.list[k] <- xee.list[k-1]+theta.list[k-1]*tau
+  
+  if(runif(1) < m(tau)/M(tau,a,b)){
+    theta.list[k] <- -theta.list[k-1]
+  }else{
+    theta.list[k] <- theta.list[k-1]
+  }
+  
+}
+```
+
+```{r}
+hist(xee.list,probability = T,breaks = 10,main="Normal(10,9)")
+```
+
+
+# Zig-Zag (for Bivariate Normal with mu = [5,10], sigma = 5I)
+
+Initialization
+```{r}
+niter <- 10000
+d <- 2
+t.list <- NULL
+theta.list <- NULL
+xee.list <- NULL
+gamma <- c(1,1)
+mu <- c(5,10)
+sigma <- 3*diag(2)
+#sigma <- matrix(c(3,1,1,3),nrow=2,ncol=2)
+```
+
+The Zig-Zag algorithm
+```{r}
+set.seed(0521)
+t.list[1] <- 0
+theta.list <- rbind(theta.list,c(1,1))
+xee.list <- rbind(xee.list,c(1,1))
+
+for(k in 2:niter){
+  m <- function(x,mu,sigma,theta,xee,gamma){
+    m.temp <- theta*sum(sigma*(xee-mu+theta*x)) + gamma
+    return(max(0,m.temp))
+  }
+  
+  M <- function(x,a,b){
+    return(a+b*x)
+  }
+  
+  m.list <- NULL
+  M.list <- NULL
+  a <- NULL
+  b <- NULL
+  tau <- NULL
+  
+  for(i in 1:d){
+    u <- runif(1)
+    s <- -log(u)
+    m.list[i] <- m(t.list[k-1],mu,sigma[i,],theta.list[k-1,i],xee.list[k-1,i],gamma[i])
+    a[i] <- sum(abs(sigma[i,]*(xee.list[k-1,]-mu)) + gamma)
+    b[i] <- sum(abs(sigma[i,]))
+    tau[i] <- (sqrt(a[i]^2+2*b[i]*s)-a[i])/b[i]
+  }
+  
+  i0 <- which.min(tau)
+  tau <- min(tau)
+  
+  t.list[k] <- t.list[k-1]+tau
+  xee.list <- rbind(xee.list, xee.list[k-1,]+theta.list[k-1,]*tau)
+  
+  mi0tau <- m(tau,mu,sigma[i0,],theta.list[k-1,i0],xee.list[k-1,i0],gamma[i0])
+  Mi0tau <- M(tau,a[i0],b[i0])
+  
+  theta.temp <- theta.list[k-1,]
+  if(runif(1) < mi0tau/Mi0tau){
+    theta.temp[i0] <- -theta.temp[i0]
+  }
+  
+  theta.list <- rbind(theta.list,theta.temp)
+}
+```
+
+
+
+This is the raw points that algorithm is doing. We can clearly see the trace the
+algorithm is jumping. In fact, we can see that the algoithm jumps into targeted
+region fairly quickly, in about 50 iterations, with the fact that we started
+from $\mu_0 = (1,1)$. This shows the Zig Zag sampler is efficient.
+```{r}
+aviod.0 <- plot(xee.list[,1],xee.list[,2],xlim=c(1,8),ylim=c(0,13),main="Zig Zag Sampler on Bi-variate Normal")+
+  points(x=mu[1],y=mu[2],col=2,pch=19,cex=1)
+```
+
+If we use burn in, then the sample is appearing very in a very clean way.
+```{r}
+burn.in <- niter/10
+aviod.0 <- plot(xee.list[burn.in:niter,1],xee.list[burn.in:niter,2],xlim=c(0,15),ylim=c(0,15))+
+  points(x=mu[1],y=mu[2],col=2)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
